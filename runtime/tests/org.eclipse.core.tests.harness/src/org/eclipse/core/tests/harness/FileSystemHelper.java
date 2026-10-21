@@ -106,28 +106,28 @@ public class FileSystemHelper {
 	}
 
 	/**
-	 * Creates a symbolic link. Should only be called on platforms where symbolic
-	 * links can actually be created, i.e. an "ln" command is available.
+	 * Creates a symbolic link. The target is stored as given, so a relative target
+	 * is resolved relative to the folder containing the link. Should only be called
+	 * if {@link #canCreateSymLinks()} returns <code>true</code>.
 	 *
 	 * @param basedir    folder in which the symbolic link should be created
 	 * @param linkName   name of the symbolic link
 	 * @param linkTarget target to which the symbolic link should point
-	 * @param isDir      <code>true</code> if the link should point to a folder
-	 * @throws IllegalStateException in case symlink creation is not supported
-	 * @throws IOException           in case the creation of the symlink failed for
-	 *                               other reasons
+	 * @param isDir      unused, retained for compatibility
+	 * @throws IOException                   if the link could not be created, e.g.
+	 *                                       due to missing privileges on Windows
+	 * @throws UnsupportedOperationException if symbolic links are not supported
 	 */
 	public static void createSymLink(File basedir, String linkName, String linkTarget, boolean isDir)
 			throws IOException {
-		Files.createSymbolicLink(basedir.toPath().resolve(linkName), basedir.toPath().resolve(linkTarget));
+		Files.createSymbolicLink(basedir.toPath().resolve(linkName), Path.of(linkTarget));
 	}
 
 	/**
 	 * Checks whether it is possible to create a symbolic link.
 	 *
 	 * @return <code>true</code> if symbolic links can be created by a test
-	 * @throws IOException in case an error occurred when trying to create a symlink
-	 *                     for testing symlink support
+	 * @throws IOException never thrown anymore, declared for compatibility
 	 */
 	public static boolean canCreateSymLinks() throws IOException {
 		if (canCreateSymLinks == null) {
@@ -142,8 +142,8 @@ public class FileSystemHelper {
 					// Clean up if the link was created.
 					new File(tempDir.toFile(), linkName).delete();
 					canCreateSymLinks = Boolean.TRUE;
-				} catch (IllegalStateException e) {
-					// This exception indicates that creation of the symlink failed.
+				} catch (IOException | UnsupportedOperationException e) {
+					// Creating the symlink failed, e.g. due to missing privileges.
 					canCreateSymLinks = Boolean.FALSE;
 				}
 			} else {
