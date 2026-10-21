@@ -17,10 +17,8 @@ import static java.util.Comparator.reverseOrder;
 import static org.eclipse.core.tests.harness.TestHarnessPlugin.PI_HARNESS;
 import static org.eclipse.core.tests.harness.TestHarnessPlugin.log;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
@@ -108,69 +106,28 @@ public class FileSystemHelper {
 	}
 
 	/**
-	 * Creates a symbolic link. Should only be called on platforms where symbolic
-	 * links can actually be created, i.e. an "ln" command is available.
+	 * Creates a symbolic link. The target is stored as given, so a relative target
+	 * is resolved relative to the folder containing the link. Should only be called
+	 * if {@link #canCreateSymLinks()} returns <code>true</code>.
 	 *
 	 * @param basedir    folder in which the symbolic link should be created
 	 * @param linkName   name of the symbolic link
 	 * @param linkTarget target to which the symbolic link should point
-	 * @param isDir      <code>true</code> if the link should point to a folder
-	 * @throws IllegalStateException in case symlink creation is not supported
-	 * @throws IOException           in case the creation of the symlink failed for
-	 *                               other reasons
+	 * @param isDir      unused, retained for compatibility
+	 * @throws IOException                   if the link could not be created, e.g.
+	 *                                       due to missing privileges on Windows
+	 * @throws UnsupportedOperationException if symbolic links are not supported
 	 */
 	public static void createSymLink(File basedir, String linkName, String linkTarget, boolean isDir)
 			throws IOException {
-		// The following code creates even a link if
-		// Files.createSymbolicLink(new File(basedir, linkName).toPath(), new
-		// File(basedir, linkTarget).toPath());
-		// would throw java.nio.file.FileSystemException "missing rights"
-		//
-		Process process = startSymlinkCreation(basedir, linkName, linkTarget, isDir);
-		try {
-			int exitcode = process.waitFor();
-			if (exitcode != 0) {
-				// xxx wrong charset. from jdk17+ we could use Console.charset()
-				try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-					String result = reader.readLine();
-					throw new IllegalStateException("Creating symlink is unsupported: " + result);
-				}
-			}
-		} catch (InterruptedException e) {
-			throw new IOException("Creating symlink failed due to interrupted exception", e);
-		}
-	}
-
-	private static Process startSymlinkCreation(File basedir, String linkName, String linkTarget, boolean isDir)
-			throws IOException {
-		// Deliberately use an empty environment to make the test reproducible.
-		String[] environmentParameters = {};
-		if (Platform.getOS().equals(Platform.OS_WIN32)) {
-			return startSymlinkCreationOnWindows(basedir, linkName, linkTarget, isDir, environmentParameters);
-		}
-		String[] cmd = { "ln", "-s", linkTarget, linkName };
-		return Runtime.getRuntime().exec(cmd, environmentParameters, basedir);
-	}
-
-	private static Process startSymlinkCreationOnWindows(File basedir, String linkName, String linkTarget,
-			boolean isDir, String[] environmentParameters) throws IOException {
-		// use File.getPath to avoid 'Illegal argument - ".."' for using "../"
-		// instead of "..\"
-		if (isDir) {
-			String[] cmd = { "cmd", "/c", "mklink", "/d", new File(linkName).getPath(),
-					new File(linkTarget).getPath() };
-			return Runtime.getRuntime().exec(cmd, environmentParameters, basedir);
-		}
-		String[] cmd = { "cmd", "/c", "mklink", new File(linkName).getPath(), new File(linkTarget).getPath() };
-		return Runtime.getRuntime().exec(cmd, environmentParameters, basedir);
+		Files.createSymbolicLink(basedir.toPath().resolve(linkName), Path.of(linkTarget));
 	}
 
 	/**
 	 * Checks whether it is possible to create a symbolic link.
 	 *
 	 * @return <code>true</code> if symbolic links can be created by a test
-	 * @throws IOException in case an error occurred when trying to create a symlink
-	 *                     for testing symlink support
+	 * @throws IOException never thrown anymore, declared for compatibility
 	 */
 	public static boolean canCreateSymLinks() throws IOException {
 		if (canCreateSymLinks == null) {
@@ -185,8 +142,8 @@ public class FileSystemHelper {
 					// Clean up if the link was created.
 					new File(tempDir.toFile(), linkName).delete();
 					canCreateSymLinks = Boolean.TRUE;
-				} catch (IllegalStateException e) {
-					// This exception indicates that creation of the symlink failed.
+				} catch (IOException | UnsupportedOperationException e) {
+					// Creating the symlink failed, e.g. due to missing privileges.
 					canCreateSymLinks = Boolean.FALSE;
 				}
 			} else {
